@@ -1,15 +1,48 @@
 using System.Collections;
+using DG.Tweening;
 using UnityEngine;
-using UnityEngine.AddressableAssets;
-using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.SceneManagement;
 
 // Main menu actions for the title screen.
 public sealed class TitleMenuController : MonoBehaviour
 {
-    [SerializeField] private string _newGameSceneAddress = SceneAddressKeys.Game;
+    [SerializeField] private string _newGameSceneName = "VN";
+    [SerializeField] private CanvasGroup _titleCanvasGroup;
+    [SerializeField] private bool _playFadeInOnStart = true;
+    [SerializeField] private float _sceneFadeInDuration = 0.35f;
+    [SerializeField] private float _sceneFadeOutDuration = 0.3f;
 
     private bool _isLoadingScene;
+    private Tween _sceneFadeTween;
+
+    void Awake()
+    {
+        if (_titleCanvasGroup == null)
+            return;
+
+        _titleCanvasGroup.alpha = _playFadeInOnStart ? 0f : 1f;
+        _titleCanvasGroup.interactable = !_playFadeInOnStart;
+        _titleCanvasGroup.blocksRaycasts = !_playFadeInOnStart;
+    }
+
+    void Start()
+    {
+        if (_titleCanvasGroup == null || !_playFadeInOnStart)
+            return;
+
+        if (_sceneFadeTween != null && _sceneFadeTween.IsActive())
+            _sceneFadeTween.Kill();
+
+        _sceneFadeTween = _titleCanvasGroup
+            .DOFade(1f, _sceneFadeInDuration)
+            .SetEase(Ease.OutQuad)
+            .OnComplete(() =>
+            {
+                _titleCanvasGroup.interactable = true;
+                _titleCanvasGroup.blocksRaycasts = true;
+                _sceneFadeTween = null;
+            });
+    }
 
     public void OnNewGameSelected()
     {
@@ -26,12 +59,18 @@ public sealed class TitleMenuController : MonoBehaviour
 
     public void OnSettingsSelected()
     {
-        Debug.Log("[TitleMenu] Settings selected. Implementation pending.");
+        if (GlobalSettingsUIManager.Instance == null)
+        {
+            Debug.LogError("[Settings] GlobalSettingsUIManager instance is missing in scene.");
+            return;
+        }
+
+        GlobalSettingsUIManager.Instance.OpenPanel();
     }
 
-    public void OnConfigSelected()
+    public void OnGallerySelected()
     {
-        Debug.Log("[TitleMenu] Config selected. Implementation pending.");
+        Debug.Log("[TitleMenu] Galley selected. Implementation pending.");
     }
 
     public void OnExitSelected()
@@ -48,15 +87,34 @@ public sealed class TitleMenuController : MonoBehaviour
     {
         _isLoadingScene = true;
 
-        AsyncOperationHandle<UnityEngine.ResourceManagement.ResourceProviders.SceneInstance> loadHandle =
-            Addressables.LoadSceneAsync(_newGameSceneAddress, LoadSceneMode.Single, true);
-        yield return loadHandle;
+        AsyncOperation loadOperation = SceneManager.LoadSceneAsync(_newGameSceneName, LoadSceneMode.Single);
+        loadOperation.allowSceneActivation = false;
 
-        if (loadHandle.Status != AsyncOperationStatus.Succeeded)
-        {
-            Debug.LogError($"[TitleMenu] Failed to load New Game scene: {_newGameSceneAddress}");
-        }
+        _titleCanvasGroup.interactable = false;
+        _titleCanvasGroup.blocksRaycasts = true;
+
+        if (_sceneFadeTween != null && _sceneFadeTween.IsActive())
+            _sceneFadeTween.Kill();
+
+        _sceneFadeTween = _titleCanvasGroup
+            .DOFade(0f, _sceneFadeOutDuration)
+            .SetEase(Ease.OutQuad);
+
+        while (loadOperation.progress < 0.9f || (_sceneFadeTween != null && _sceneFadeTween.IsActive() && _sceneFadeTween.IsPlaying()))
+            yield return null;
+
+        // Activates only after scene data is fully loaded for smoother transition.
+        loadOperation.allowSceneActivation = true;
+
+        while (!loadOperation.isDone)
+            yield return null;
 
         _isLoadingScene = false;
+    }
+
+    void OnDestroy()
+    {
+        if (_sceneFadeTween != null && _sceneFadeTween.IsActive())
+            _sceneFadeTween.Kill();
     }
 }

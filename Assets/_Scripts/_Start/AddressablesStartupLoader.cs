@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
+using UnityEngine.AddressableAssets.ResourceLocators;
 using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.SceneManagement;
 
@@ -20,13 +21,15 @@ public sealed class AddressablesStartupLoader
             Debug.Log("[Addressables] Initializing...");
         }
 
-        AsyncOperationHandle initHandle = Addressables.InitializeAsync();
+        AsyncOperationHandle<IResourceLocator> initHandle = Addressables.InitializeAsync(false);
         yield return initHandle;
 
         if (initHandle.Status != AsyncOperationStatus.Succeeded)
         {
             Debug.LogError("[Addressables] InitializeAsync failed.");
         }
+
+        Addressables.Release(initHandle);
     }
 
     public IEnumerator LoadScene(string sceneAddress)
